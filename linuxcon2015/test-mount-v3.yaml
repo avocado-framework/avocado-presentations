@@ -1,0 +1,5 @@
+!mux
+srv_tmp:
+    mountpoint: /srv/tmp
+srv_ro:
+    mountpoint: /srv/ro

@@ -1,0 +1,250 @@
+* What is Avocado
+  - Avocado is a set of tools and libraries to help with automated testing.
+
+* What is Avocado to QEMU/KVM Developers?
+  - Ditto
+  - The next evolutionary step of virt-test in the form of Avocado-VT
+  - A hopefully revolutionary step of virt-test in the form Avocado-Virt
+
+* Talking about tools...
+  - You have (generic enough) tools to manage your source code
+  - Probably not the same for testing tools
+  - Developers are often given "unittest-like" libraries and/or
+    the chance to write custom test code (shell, c, etc)
+
+* Custom test code is fine!
+  - But not having tools to help with that is *not*
+  - Running tests without nice tooling is like writing code without version control
+
+* I've got news for you
+  - You (mostly) live without a git-like tools for testing
+
+* With GIT
+  - "You" write code: everyone knows who, why, when, what (code).
+
+* With Avocado
+  - "You" run tests: everyone knows who, where, when, what (outcome).
+  - All jobs are recorded, have unique ID
+
+* Developer working on (shiny new) "bind" mount:
+  - Configures system (mount-test-setup.sh):
+
+   #!/bin/bash
+   # (must be run as root)
+   mkdir /srv/tmp
+   echo "/tmp /srv/tmp none bind,noauto,user 0 0" >> /etc/fstab
+    
+  - Writes a fair test:
+
+   #!/bin/bash -e
+   mount /srv/tmp
+   grep -q /srv/tmp /proc/mounts
+   umount /srv/tmp
+   grep -qv /srv/tmp /proc/mounts
+
+* Without Avocado
+  - $ ./test-mount.sh
+  - Looks at the outcome
+  - That is, well, underwhelming...
+
+* With Avocado
+  - $ avocado run test-mount.sh
+  - Looks at the outcome
+  - That is better!
+  - $ avocado run test-mount.sh --open-browser
+  - That is way better!
+
+* What did you get?
+  - Results persisted (as files)
+  - System information collected
+  - Better visual output of the outcome
+  - Communicate the results to other team members, or to machines
+
+* Sysinfo
+  - Was /etc/fstab correctly configured?
+  - Let's collect it!
+
+  # echo "/etc/fstab" >> /etc/avocado/sysinfo/files
+
+  - Rerun the test:
+  
+  $ avocado run test-mount.sh --open-browser
+
+* Is that all?
+  - Absolutely not! This is just the some of the "tool" part
+  - Remeber: "Avocado is a set of tools ***and libraries*** to help with automated testing.
+  - At this point, those libraries are mostly for Python
+  - Some support for shell scripts, and more planned
+
+* A moment of thought about test ERRORs and FAILures
+  - When writing a non-assertive test, like test-mount.sh, some test
+    ERRORs may end up showing as test FAILures
+  - It's possible to either eliminate or greatly reduce that
+  - Avocado has very well defined test status: PASS, FAIL, ERROR, 
+
+* Let's have a shot at this Python version then
+ - turn (SIMPLE) test-mount.sh into (INSTRUMENTED) test-mount.py
+
+   from avocado import Test, fail_on
+   from avocado.utils import process
+
+   class BindMount(Test):
+
+       @fail_on
+       def test(self):
+           process.run("mount /srv/tmp")
+           process.run("grep /srv/tmp /proc/mounts")
+           process.run("umount /srv/tmp")
+           process.run("grep -v /srv/tmp /proc/mounts")
+
+* Avocado knows they're different
+
+   $ avocado list test-mount.{sh,py}
+   SIMPLE       test-mount.sh                
+   INSTRUMENTED test-mount.py:BindMount.test
+
+  - Test Code is officially Python, but very shell-like
+  - Still, it's an INSTRUMENTED Avocado test
+
+* What do we gain?
+  - Dedicated log streams
+
+  ...
+  def test(self):
+     self.log.info("About to mount")
+     process.run("mount /srv/tmp")
+  ...
+
+* Is that all we gain?
+  - Well, all commands are logged
+
+   ..
+   12:04:54 process    L0272 INFO | Running 'mount /srv/tmp'
+   12:04:54 process    L0272 INFO | Running 'grep /srv/tmp /proc/mounts'
+   12:04:54 process    L0342 DEBUG| [stdout] tmpfs /srv/tmp tmpfs rw,seclabel 0 0
+   ...
+
+* I'm still not convinced, do I get anything else?
+  - Avocado has about XX unique features
+  - Instrumentation with GDB
+  - Instrumentation with any wrapper you write (some included)
+  - Running the same test on a remote system transparently
+  - Running the same test on a VM, including snapshotting and
+    reverting its state
+  - With a single test, you can test thousands of different variantions
+    (that's the Multiplexer feature, we'll get back on that)
+  - Your own feature, by means of new plugins
+
+* Suppose you're still interested
+  - Let's get back to the test and make it better:
+  * Make it more Pythonic
+  * Make it more assertful
+
+* Shall I present "test-mount-v2.py":
+
+   from avocado import Test, fail_on				 
+   from avocado.utils import process				 
+   								 
+   class BindMount(Test):						 
+   								 
+       @fail_on(process.CmdError)					 
+       def test_mount(self):					 
+           process.run("mount /srv/tmp")				 
+           self.assertIn("/srv/tmp", open("/proc/mounts").read())	 
+   								 
+       @fail_on(process.CmdError)					 
+       def test_umount(self):					 
+           if not "/srv/tmp" in open("/proc/mounts").read():	 
+               process.run("mount /srv/tmp")			 
+   								 
+           process.run("umount /srv/tmp")				 
+           self.assertNotIn("/srv/tmp", open("/proc/mounts").read())
+
+* What if we could poke into mount or umount?
+  - Yes, we can!
+  
+  - $ avocado run test-mount-v2.py --gdb-run-bin=mount (AVOCADO BUG HERE)
+
+* What if we could try multiple mount points with the same test?
+
+  - New mount point and fstab entry with "ro" option
+
+    #!/bin/bash
+    # (must be run as root)
+    mkdir /srv/tmp
+    echo "/tmp /srv/tmp none bind,noauto,user 0 0" >> /etc/fstab
+
+    mkdir /srv/ro
+    echo "/tmp /srv/ro none bind,noauto,user,ro 0 0" >> /etc/fstab
+
+
+  - Let's use parameters instead of fixed values on the test
+  - Parameters will come from a Multiplex file:
+
+   !mux			 
+   srv_tmp:		 
+       mountpoint: /srv/tmp
+   srv_ro:		 
+       mountpoint: /srv/ro
+
+* The parameterized test itself:
+
+   from avocado import Test, fail_on                                             
+   from avocado.utils import process                                             
+                                                                                 
+   class BindMount(Test):                                                        
+                                                                                 
+       @fail_on(process.CmdError)                                                
+       def test_mount(self):                                                     
+           process.run("mount %s" % self.params.get("mountpoint"))               
+           self.assertIn(self.params.get("mountpoint"),                          
+                         open("/proc/mounts").read())                            
+                                                                                 
+       @fail_on(process.CmdError)                                                
+       def test_umount(self):                                                    
+           if not self.params.get("mountpoint") in open("/proc/mounts").read():  
+               process.run("mount %s" % self.params.get("mountpoint"))           
+                                                                                 
+           process.run("umount %s" % self.params.get("mountpoint"))              
+           self.assertNotIn(self.params.get("mountpoint"),                       
+                            open("/proc/mounts").read())
+
+* Setting up a remote machine
+
+ - Create an SSH key for the best experience
+
+  $ ssh-keygen
+  $ ssh-copy-id -i ~/.ssh/id_rsa user@host
+
+ - On the remote machine:
+
+  # yum install avocado
+  # mount-setup-v2.sh
+
+* Running the same test on a remote machine
+
+  $ avocado run test-mount-v3.py --remote-username=user --remote-machine=host
+
+* Sharing results
+ - Setup an HTTP server (as root)
+  # yum/dnf install httpd
+  # setsebool -P httpd_enable_homedirs=on
+  # sed -e 's/UserDir\ disabled/UserDir\ enabled/' -i /etc/httpd/conf.d/userdir.conf
+  # sed -e 's/#UserDir\ public_html/UserDir\ public_html -i /etc/httpd/conf.d/userdir.conf
+
+ - As yourself
+  $ setfacl -m g:apache:x ~/
+  $ setfacl -R -m g:apache:rx ~/public_html
+  $ setfacl -d -m g:apache:rx ~/public_html
+  $ setfacl -m g:apache:rx ~/avocado
+  
+  $ cd ~/avocado
+  $ cp -ruv job-results ~/public_html/
+  $ rm -fr job-results
+  $ ln -s ~/public_html/job-results ~/avocado/
+
+- You could bookmark:
+
+  http://my-host/~user/job-results/
+
+  http://colleague-host/~user/job-results/latest/html/results.html
