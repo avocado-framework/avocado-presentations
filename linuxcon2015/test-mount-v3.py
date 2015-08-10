@@ -8,6 +8,9 @@ class BindMount(Test):
     @fail_on(process.CmdError)
     def test_mount(self):
         mount_point = self.params.get("mountpoint", default=self.DEFAULT_MOUNT_POINT)
+        if mount_point in open("/proc/mounts").read():
+            process.run("umount %s" % mount_point)
+
         process.run("mount %s" % mount_point)
         self.assertIn(mount_point, open("/proc/mounts").read())
 

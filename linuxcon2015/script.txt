@@ -1,58 +1,38 @@
-* What is Avocado
-  - Avocado is a set of tools and libraries to help with automated testing.
+* Developer working on (shiny new) "bind" mount (make a part of the fs available on another location):
+  - This developer is working on either userspace (mount command itself) or kernel level
+  - Every time a change is made, we want to recompile the software and re-run the test (if hacking kernel, include a reboot).
+  - The developer configures system (mount-test-setup.sh):
 
-* What is Avocado to QEMU/KVM Developers?
-  - Ditto
-  - The next evolutionary step of virt-test in the form of Avocado-VT
-  - A hopefully revolutionary step of virt-test in the form Avocado-Virt
+    #!/bin/bash
+    # (must be run as root)
+    mkdir -p /srv/tmp
+    grep -q '/tmp /srv/tmp none bind,noauto,user 0 0' /etc/fstab || echo '/tmp /srv/tmp none bind,noauto,user 0 0' >> /etc/fstab
 
-* Talking about tools...
-  - You have (generic enough) tools to manage your source code
-  - Probably not the same for testing tools
-  - Developers are often given "unittest-like" libraries and/or
-    the chance to write custom test code (shell, c, etc)
 
-* Custom test code is fine!
-  - But not having tools to help with that is *not*
-  - Running tests without nice tooling is like writing code without version control
-
-* I've got news for you
-  - You (mostly) live without a git-like tools for testing
-
-* With GIT
-  - "You" write code: everyone knows who, why, when, what (code).
-
-* With Avocado
-  - "You" run tests: everyone knows who, where, when, what (outcome).
-  - All jobs are recorded, have unique ID
-
-* Developer working on (shiny new) "bind" mount:
-  - Configures system (mount-test-setup.sh):
-
-   #!/bin/bash
-   # (must be run as root)
-   mkdir /srv/tmp
-   echo "/tmp /srv/tmp none bind,noauto,user 0 0" >> /etc/fstab
-    
   - Writes a fair test:
 
-   #!/bin/bash -e
-   mount /srv/tmp
-   grep -q /srv/tmp /proc/mounts
-   umount /srv/tmp
-   grep -qv /srv/tmp /proc/mounts
+    #!/bin/bash -e
+
+    # Make sure the mount point is not mounted previously
+    grep -q -v /srv/tmp /proc/mounts || umount /srv/tmp
+
+    mount /srv/tmp
+    grep -q /srv/tmp /proc/mounts && echo 'PASS: Mount test' || echo 'FAIL: Mount test'
+
+    umount /srv/tmp
+    grep -q -v /srv/tmp /proc/mounts && echo 'PASS: Umount test' || echo 'FAIL: Umount test'
+
 
 * Without Avocado
   - $ ./test-mount.sh
   - Looks at the outcome
-  - That is, well, underwhelming...
+  - That is not bad. Can we make it better?
 
 * With Avocado
   - $ avocado run test-mount.sh
   - Looks at the outcome
-  - That is better!
   - $ avocado run test-mount.sh --open-browser
-  - That is way better!
+  - Now that's better!
 
 * What did you get?
   - Results persisted (as files)
@@ -85,17 +65,26 @@
 * Let's have a shot at this Python version then
  - turn (SIMPLE) test-mount.sh into (INSTRUMENTED) test-mount.py
 
-   from avocado import Test, fail_on
-   from avocado.utils import process
+from avocado import Test, fail_on
+from avocado.utils import process
 
-   class BindMount(Test):
+class BindMount(Test):
 
-       @fail_on
-       def test(self):
-           process.run("mount /srv/tmp")
-           process.run("grep /srv/tmp /proc/mounts")
-           process.run("umount /srv/tmp")
-           process.run("grep -v /srv/tmp /proc/mounts")
+    @fail_on
+    def test_mount(self):
+        # Please don't actually write your test like this
+        process.run("grep -q -v /srv/tmp /proc/mounts || umount /srv/tmp",
+                    shell=True)
+        process.run("mount /srv/tmp")
+        process.run("grep /srv/tmp /proc/mounts")
+
+    @fail_on
+    def test_umount(self):
+        # Please don't actually write your test like this
+        process.run("grep -q /srv/tmp /proc/mounts || mount /srv/tmp",
+                    shell=True)
+        process.run("umount /srv/tmp")
+        process.run("grep -v /srv/tmp /proc/mounts")
 
 * Avocado knows they're different
 
@@ -131,7 +120,7 @@
   - Running the same test on a remote system transparently
   - Running the same test on a VM, including snapshotting and
     reverting its state
-  - With a single test, you can test thousands of different variantions
+  - With a single test, you can cover a large test matrix (test combinations)
     (that's the Multiplexer feature, we'll get back on that)
   - Your own feature, by means of new plugins
 
@@ -142,41 +131,39 @@
 
 * Shall I present "test-mount-v2.py":
 
-   from avocado import Test, fail_on				 
-   from avocado.utils import process				 
-   								 
-   class BindMount(Test):						 
-   								 
-       @fail_on(process.CmdError)					 
-       def test_mount(self):					 
-           process.run("mount /srv/tmp")				 
-           self.assertIn("/srv/tmp", open("/proc/mounts").read())	 
-   								 
-       @fail_on(process.CmdError)					 
-       def test_umount(self):					 
-           if not "/srv/tmp" in open("/proc/mounts").read():	 
-               process.run("mount /srv/tmp")			 
-   								 
-           process.run("umount /srv/tmp")				 
-           self.assertNotIn("/srv/tmp", open("/proc/mounts").read())
+    from avocado import Test, fail_on
+    from avocado.utils import process
 
-* What if we could poke into mount or umount?
-  - Yes, we can!
-  
-  - $ avocado run test-mount-v2.py --gdb-run-bin=mount (AVOCADO BUG HERE)
+    class BindMount(Test):
 
-* What if we could try multiple mount points with the same test?
+        @fail_on(process.CmdError)
+        def test_mount(self):
+            if "/srv/tmp" in open("/proc/mounts").read():
+                process.run("umount /srv/tmp")
+
+            process.run("mount /srv/tmp")
+            self.assertIn("/srv/tmp", open("/proc/mounts").read())
+
+        @fail_on(process.CmdError)
+        def test_umount(self):
+            if not "/srv/tmp" in open("/proc/mounts").read():
+                process.run("mount /srv/tmp")
+
+            process.run("umount /srv/tmp")
+            self.assertNotIn("/srv/tmp", open("/proc/mounts").read())
+
+
+* What if we could try multiple mount points within the same test?
 
   - New mount point and fstab entry with "ro" option
 
     #!/bin/bash
     # (must be run as root)
-    mkdir /srv/tmp
-    echo "/tmp /srv/tmp none bind,noauto,user 0 0" >> /etc/fstab
+    mkdir -p /srv/tmp
+    grep -q '/tmp /srv/tmp none bind,noauto,user 0 0' /etc/fstab || echo '/tmp /srv/tmp none bind,noauto,user 0 0' >> /etc/fstab
 
-    mkdir /srv/ro
-    echo "/tmp /srv/ro none bind,noauto,user,ro 0 0" >> /etc/fstab
-
+    mkdir -p /srv/ro
+    grep -q '/tmp /srv/ro none bind,noauto,user,ro 0 0' /etc/fstab || echo '/tmp /srv/ro none bind,noauto,user,ro 0 0' >> /etc/fstab
 
   - Let's use parameters instead of fixed values on the test
   - Parameters will come from a Multiplex file:
@@ -189,25 +176,30 @@
 
 * The parameterized test itself:
 
-   from avocado import Test, fail_on                                             
-   from avocado.utils import process                                             
-                                                                                 
-   class BindMount(Test):                                                        
-                                                                                 
-       @fail_on(process.CmdError)                                                
-       def test_mount(self):                                                     
-           process.run("mount %s" % self.params.get("mountpoint"))               
-           self.assertIn(self.params.get("mountpoint"),                          
-                         open("/proc/mounts").read())                            
-                                                                                 
-       @fail_on(process.CmdError)                                                
-       def test_umount(self):                                                    
-           if not self.params.get("mountpoint") in open("/proc/mounts").read():  
-               process.run("mount %s" % self.params.get("mountpoint"))           
-                                                                                 
-           process.run("umount %s" % self.params.get("mountpoint"))              
-           self.assertNotIn(self.params.get("mountpoint"),                       
-                            open("/proc/mounts").read())
+from avocado import Test, fail_on
+from avocado.utils import process
+
+class BindMount(Test):
+
+    DEFAULT_MOUNT_POINT = "/srv/tmp"
+
+    @fail_on(process.CmdError)
+    def test_mount(self):
+        mount_point = self.params.get("mountpoint", default=self.DEFAULT_MOUNT_POINT)
+        if mount_point in open("/proc/mounts").read():
+            process.run("umount %s" % mount_point)
+
+        process.run("mount %s" % mount_point)
+        self.assertIn(mount_point, open("/proc/mounts").read())
+
+    @fail_on(process.CmdError)
+    def test_umount(self):
+        mount_point = self.params.get("mountpoint", default=self.DEFAULT_MOUNT_POINT)
+        if not mount_point in open("/proc/mounts").read():
+            process.run("mount %s" % mount_point)
+
+        process.run("umount %s" % mount_point)
+        self.assertNotIn(mount_point, open("/proc/mounts").read())
 
 * Setting up a remote machine
 
@@ -230,7 +222,7 @@
   # yum/dnf install httpd
   # setsebool -P httpd_enable_homedirs=on
   # sed -e 's/UserDir\ disabled/UserDir\ enabled/' -i /etc/httpd/conf.d/userdir.conf
-  # sed -e 's/#UserDir\ public_html/UserDir\ public_html -i /etc/httpd/conf.d/userdir.conf
+  # sed -e 's/#UserDir\ public_html/UserDir\ public_html/' -i /etc/httpd/conf.d/userdir.conf
 
  - As yourself
   $ setfacl -m g:apache:x ~/
