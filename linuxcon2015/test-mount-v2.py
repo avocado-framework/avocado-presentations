@@ -5,6 +5,9 @@ class BindMount(Test):
 
     @fail_on(process.CmdError)
     def test_mount(self):
+        if "/srv/tmp" in open("/proc/mounts").read():
+            process.run("umount /srv/tmp")
+
         process.run("mount /srv/tmp")
         self.assertIn("/srv/tmp", open("/proc/mounts").read())
 
