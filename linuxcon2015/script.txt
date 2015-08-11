@@ -219,21 +219,12 @@ class BindMount(Test):
 
 * Sharing results
  - Setup an HTTP server (as root)
-  # yum/dnf install httpd
-  # setsebool -P httpd_enable_homedirs=on
-  # sed -e 's/UserDir\ disabled/UserDir\ enabled/' -i /etc/httpd/conf.d/userdir.conf
-  # sed -e 's/#UserDir\ public_html/UserDir\ public_html/' -i /etc/httpd/conf.d/userdir.conf
 
- - As yourself
-  $ setfacl -m g:apache:x ~/
-  $ setfacl -R -m g:apache:rx ~/public_html
-  $ setfacl -d -m g:apache:rx ~/public_html
-  $ setfacl -m g:apache:rx ~/avocado
-  
-  $ cd ~/avocado
-  $ cp -ruv job-results ~/public_html/
-  $ rm -fr job-results
-  $ ln -s ~/public_html/job-results ~/avocado/
+ # apache-setup.sh
+
+ - Setup avocado job results directory
+
+ $ apache-public-html.sh
 
 - You could bookmark:
 
