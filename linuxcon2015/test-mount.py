@@ -8,7 +8,7 @@ class BindMount(Test):
         # Please don't actually write your test like this
         process.run("grep -q -v /srv/tmp /proc/mounts || umount /srv/tmp",
                     shell=True)
-        process.run("mount /srv/tmp")
+        process.run("/usr/bin/mount /srv/tmp")
         process.run("grep /srv/tmp /proc/mounts")
 
     @fail_on
@@ -16,5 +16,5 @@ class BindMount(Test):
         # Please don't actually write your test like this
         process.run("grep -q /srv/tmp /proc/mounts || mount /srv/tmp",
                     shell=True)
-        process.run("umount /srv/tmp")
+        process.run("/usr/bin/umount /srv/tmp")
         process.run("grep -v /srv/tmp /proc/mounts")

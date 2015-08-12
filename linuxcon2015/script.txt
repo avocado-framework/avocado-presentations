@@ -11,16 +11,39 @@
 
   - Writes a fair test:
 
-    #!/bin/bash -e
+    #!/bin/bash
+
+    FAIL=0
+    MOUNT_POINT="/srv/tmp"
+    PROC_MOUNTS="/proc/mounts"
+
+    check() {
+        $1
+        if [ $? != 0 ]; then
+            FAIL=1
+            echo "FAIL: $2"
+        else
+            echo "PASS: $2"
+        fi
+    }
+
+    mount_test() {
+        mount $1
+        check "grep -q $1 /proc/mounts" 'Mount Test'
+    }
+
+    umount_test() {
+        umount $1
+        check "grep -q -v $1 /proc/mounts" 'Umount Test'
+    }
 
     # Make sure the mount point is not mounted previously
-    grep -q -v /srv/tmp /proc/mounts || umount /srv/tmp
+    grep -q -v $MOUNT_POINT $PROC_MOUNTS || umount $MOUNT_POINT
+    mount_test $MOUNT_POINT
+    umount_test $MOUNT_POINT
 
-    mount /srv/tmp
-    grep -q /srv/tmp /proc/mounts && echo 'PASS: Mount test' || echo 'FAIL: Mount test'
-
-    umount /srv/tmp
-    grep -q -v /srv/tmp /proc/mounts && echo 'PASS: Umount test' || echo 'FAIL: Umount test'
+    # Report failures
+    exit $FAIL
 
 
 * Without Avocado
@@ -29,15 +52,19 @@
   - That is not bad. Can we make it better?
 
 * With Avocado
-  - $ avocado run test-mount.sh
-  - Looks at the outcome
   - $ avocado run test-mount.sh --open-browser
+  - Looks at the outcome
   - Now that's better!
+  - Show system file collection
 
 * What did you get?
   - Results persisted (as files)
+  - The persistence allows you to do cool things, such as sharing results after
+    you configure a webserver (NOT AN AVOCADO FEATURE) and share it with your
+    colleagues http://localhost/~user/job-results/latest/
+  - See more info in the setup scripts
   - System information collected
-  - Better visual output of the outcome
+  - Good visual output of the outcome
   - Communicate the results to other team members, or to machines
 
 * Sysinfo
@@ -88,9 +115,10 @@ class BindMount(Test):
 
 * Avocado knows they're different
 
-   $ avocado list test-mount.{sh,py}
-   SIMPLE       test-mount.sh                
-   INSTRUMENTED test-mount.py:BindMount.test
+    $ avocado list test-mount.{py,sh}
+    INSTRUMENTED test-mount.py:BindMount.test_mount
+    INSTRUMENTED test-mount.py:BindMount.test_umount
+    SIMPLE       test-mount.sh
 
   - Test Code is officially Python, but very shell-like
   - Still, it's an INSTRUMENTED Avocado test
@@ -152,6 +180,13 @@ class BindMount(Test):
             process.run("umount /srv/tmp")
             self.assertNotIn("/srv/tmp", open("/proc/mounts").read())
 
+* Let's see how to run the tests on a remote host
+
+    avocado run test-mount-v2.py --remote-hostname 192.168.124.65 --open-browser
+
+* Let's see how we use GDB to poke into the program under test:
+
+    avocado run test-mount-v2.py --gdb-run-bin /usr/bin/mount
 
 * What if we could try multiple mount points within the same test?
 
@@ -201,21 +236,10 @@ class BindMount(Test):
         process.run("umount %s" % mount_point)
         self.assertNotIn(mount_point, open("/proc/mounts").read())
 
-* Setting up a remote machine
-
- - Create an SSH key for the best experience
-
-  $ ssh-keygen
-  $ ssh-copy-id -i ~/.ssh/id_rsa user@host
-
- - On the remote machine:
-
-  # yum install avocado
-  # mount-setup-v2.sh
-
-* Running the same test on a remote machine
-
-  $ avocado run test-mount-v3.py --remote-username=user --remote-machine=host
+* You can check out the contents of the multiplex file
+$ avocado multiplex test-mount-v3.yaml --contents
+* You can check the tree representation of the file contents
+$ avocado multiplex test-mount-v3.yaml --contents --tree
 
 * Sharing results
  - Setup an HTTP server (as root)
