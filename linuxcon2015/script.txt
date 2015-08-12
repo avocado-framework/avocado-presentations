@@ -185,7 +185,9 @@ class BindMount(Test):
     avocado run test-mount-v2.py --remote-hostname 192.168.124.65 --open-browser
 
 * Let's see how we use GDB to poke into the program under test:
-
+  First, mount is a setuid program, so it can't run properly under GDB. So we'll have to 'cheat' if we want the test to behave properly while being run inside GDB:
+    chmod u+s /usr/bin/gdb /usr/bin/gdbserver
+  Now let's run the test:
     avocado run test-mount-v2.py --gdb-run-bin /usr/bin/mount
 
 * What if we could try multiple mount points within the same test?
