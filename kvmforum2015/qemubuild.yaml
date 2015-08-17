@@ -1,0 +1,19 @@
+source_location: ~/src/qemu
+git_branch: master
+git_pull: False
+
+build_type: !mux
+    release:
+        configure_parameters: --cc='/bin/ccache /bin/gcc'
+        build_suffix: build/release
+    debug:
+        configure_parameters: --enable-debug --cc='/bin/ccache /bin/gcc'
+        build_suffix: build/debug
+
+targets: !mux
+    x86_64:
+        target: x86_64-softmmu
+    i386:
+        target: i386-softmmu
+    arm:
+        target: arm-softmmu

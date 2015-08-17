@@ -1,0 +1,17 @@
+bread: !mux
+    italian:
+        bread: Italian
+    nine_grain_wheat:
+        bread: Nine grain wheat
+
+topping: !mux
+    american:
+        topping: American
+    monterey_cheddar:
+        topping: Monterey cheddar
+
+filling: !mux
+    roast_beef:
+        filling: Roast Beef
+    tuna:
+        filling: Tuna

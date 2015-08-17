@@ -1,0 +1,108 @@
+﻿https://goo.gl/m0odA6
+
+* QEMU developer working on a feature that impacts three targets: x86-64, i386, arm.
+ - My working branch must build for these specific targets
+ - We set ourselves to write a simple shell script
+ - This script is now our official build test
+
+ (switch to qemubuild.sh)
+
+* What happens when you run such scripts?
+ - On the upside, it runs!
+ - On the downside:
+   * results is lost, thus history is lost
+   * Q: "What compiler version was I using?" A: "Not sure"
+   * Q: "Did the build I did a week ago failed?" A: "I *think* so"
+
+* Introducing Avocado for running "daily tests"
+ - Avocado can run any executable capable of returning "0" as PASS, non-zero as FAIL
+
+   $ avocado run /bin/true /bin/false
+
+ - On the downside
+   * It's yet another tool
+
+ - On the upside
+   * But it's quite simple to use
+   * Results persisted == History is preserved
+     - Q: "What compiler version was I using?" A: "Let me check... gcc 5.1.1"
+     - Q: "Did the build I did a week ago failed?" A: "Let me check... Yes, it failed"
+   * Results can be imported, exported, merged.
+   * A simple HTTP server will do as a starting point
+   * See more info in the setup scripts
+   * Good visual output of the outcome
+   * Communicate the results to other team members, or to machines
+
+* Let's assume release and debug versions have significant performance differences
+ - We want to build release versions for performance regressions tests, and debug
+   versions for obvious reasons
+ - While still keeping all the separate targets (x86-64, i386, arm)
+
+ (open text editor)
+   * build type:
+    - release
+    - debug
+   * target
+    - x86-64
+    - i386
+    - arm
+
+  $ avocado multiplex qemubuild.yaml --tree
+
+    * build_type
+        ╠══ release
+        ╚══ debug
+    * targets
+        ╠══ x86_64
+        ╠══ i386
+        ╚══ arm
+
+ (switch to qemubuild.yaml)
+ (switch to qemubuild.py)
+
+ $ avocado run qemubuild.py -m qemubuild.yaml
+
+ ( "cut" terminal in half: CTRL+SHIFT+T, CTRL+) )
+ ($ tail_avocado)
+
+ $ tree -L 2 ~/src/qemu/build
+
+    ├── debug
+    │   ├── arm-softmmu
+    │   ├── i386-softmmu
+    │   └── x86_64-softmmu
+    └── release
+        ├── arm-softmmu
+        ├── i386-softmmu
+        └── x86_64-softmmu
+
+* Will Avocado help me with running, say, qemu-iotests?
+ - You're probably well aware the once you build qemu, you get qemu-iotests
+ - But tests live in the source tree
+ - And, even though they look like standalone scripts, they need to be run
+   under "check", from the *built* tree
+
+ $ avocado run --inner-runner ~/src/qemu/build/release/x86_64-softmmu/tests/qemu-iotests/check --inner-runner-chdir runner 001 002 003
+ $ alias avocado-qemu-iotests='avocado run --inner-runner ~/src/qemu/build/release/x86_64-softmmu/tests/qemu-iotests/check --inner-runner-chdir runner'
+ $ alias avocado-qemu-iotests-smoke='avocado run --inner-runner ~/src/qemu/build/release/x86_64-softmmu/tests/qemu-iotests/check --inner-runner-chdir runner 001 002 003 004 010 020'
+
+* Running tests on remote machines
+
+ (switch to qemuimg.py)
+
+ - talk about data files
+ - show qemuimg.py.data/good.qcow2 and qemuimg.py.data/bad.qcow2
+
+Avocado-VT
+==========
+
+ The obvious stuff :)
+
+Installation
+------------
+
+  * Bootstraping
+  * Running /bin/true boot
+  * Running --qemu-bin <path-to-qemu>
+  * Running --qemu-bin <path-to-qemu> --gdb-run-bin <path-to-qemu>:version
+  * Running --qemu-bin <path-to-qemu> --gdb-run-bin <path-to-qemu>:vl.c:1909
