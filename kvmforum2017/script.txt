@@ -1,0 +1,97 @@
+Welcome / Intro (# 1)
+=====================
+* Hello everyone, welcome!
+* My name is Cleber Rosa, I'm a Software Engineer at Red Hat
+* I'm part of the Virtualization Team (KVM, libvirt, etc)
+* I work mostly on the Testing related initiatives and projects
+  such as Avocado and Avocado-VT.
+
+Agenda (# 2)
+============
+* Today we're going to talk about Software Testing basic principles
+* It starts with Software Testing 101 review, textbook stuff - bear with me
+* We'll move into Equivalence Partitioning
+* Then into Boundary Value Analysis
+* And will Finish with Combinatorial Testing
+
+Glenford J Myers' Triangle Check (#3)
+=====================================
+* As "promised", we'll start by reviewing very basic approaches to testing
+  (those techniques usually go unnoticed, even when they're being used
+  and they'll be useful references when we move into more advanced topics)
+* Most software testing texbooks draw inspiration, or incorporate and quote
+  Glenford J. Myer's Triangle example.  So this is like the "hello world" for
+  software testing.
+* It presents a simple program that takes as input 3 lengths, which are the
+  triangle's sides
+* It outputs the triangle classification: equilateral, isoceles or scalene
+* The point of this example/exercise is to reason on how such a simple program
+  can, or should, be tested
+  
+Triangle Check Basic Test (#4)
+==============================
+* The basic checks are:
+  - 3 equal sides: equilateral
+  - 2 equal sides: isoceles
+  - 3 different sides: scanele
+
+Triangle Check Basic (Naive) Implementation (INTERACTIVE)
+========================================================
+( SHOW 01_triangle_basic.py - triangle_check() )
+* A rather naive and simplistic implementation of the triangle check...
+
+( SHOW 01_triangle_basic.py - Triangle(Test) )
+* ... but one that happens to be pass this also simplistic amount of test
+
+( RUN "avocado run 01_triangle_basic.py")
+
+Triangle Check Error Test (#7)
+==============================
+
+* We shouldn't allow for a triangle with a zero-length side
+* Neither a negative length
+
+( SHOW 02_triangle_error_no_length.py )
+
+( RUN "avocado run 02_triangle_error_no_length.py" )
+
+* Then, a characteristic of triangles is that the sum of two
+  sides, must be larger than the third size.
+
+( SHOW 03_triangle_error_invalid_sum.py )
+
+( RUN  03_triangle_error_invalid_sum.py )
+
+Triangle Check Extended Test Cases (#8)
+=======================================
+
+* Even with this amount of tests, that are a lot of important
+  scenarios not being tested
+
+* For instance, the current code has a bug on how it computes
+  the sum of two sides' lengths and compares to the third.
+
+( EDIT 03_triangle_error_invalid_sum.py )
+( ADD  self.assertEqual(triangle_check(3, 2, 1), "error") )
+( RUN  avocado run 03_triangle_error_invalid_sum.py )
+
+* The solution is to have a more robust check, for each unique
+  combination of the first two sides (it's a sum, so the order
+  doesn't matter) with the third side.
+
+( SHOW 04_triangle_error_permutation.py )
+( RUN  avocado run 04_triangle_error_permutation.py )
+
+* The types of input is a frequent source of problems, so
+  it's also something to consider adding a test for.
+
+( SHOW 05_triangle_bad_input.py )
+( RUN  avocado run 05_triangle_bad_input.py )
+
+* Not only the type, but for many input *types*, the number
+  of inputs should be subject to test
+
+Lessons from a simple example (#9)
+=================================
+
+

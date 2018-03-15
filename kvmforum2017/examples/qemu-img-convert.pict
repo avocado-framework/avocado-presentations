@@ -1,0 +1,35 @@
+# qemu-img convert
+#    [--object objectdef]
+#    [--image-opts]
+#    [-c]
+#    [-p]
+#    [-q]
+#    [-n]
+#  * [-f fmt]
+#  * [-t cache]
+#  * [-T src_cache]
+#  * [-O output_fmt]
+#    [-o options]
+#    [-s snapshot_id_or_name]
+#    [-l snapshot_param]
+#    [-S sparse_size]
+#    [-m num_coroutines]
+#    [-W] filename [filename2 [...]] output_filename
+
+# qemu-img create parameters
+# CHECK: qemu-img will create qcow images with size 0b, but then
+# requires minimum of 2b, even for 'qemu-img info <img>'
+#
+# Possible better values (at boundaries): -1, 0b, 9223372036854775808b == 8EiB (exbibytes), 8EiB+1b
+# Values that shows some issues: 0b
+# Safe values: 2b, 1M, 1G
+input_size: 2b, 1M, 1G
+
+# qemu-img convert parameters
+fmt: parallels, qcow, qcow2, qed, raw, vdi, vhdx, vmdk, vpc
+output_fmt: parallels, qcow, qcow2, qed, raw, vdi, vhdx, vmdk, vpc
+src_cache: off, writeback, unsafe, writethrough
+cache: off, writeback, unsafe, writethrough
+
+compressed: on, off
+IF NOT [output_fmt] = "qcow2" THEN [compressed] = "off";
